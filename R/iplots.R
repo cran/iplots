@@ -1,8 +1,8 @@
 #==========================================================================
 # iplots - interactive plots for R
-# Package version: 1.0-3
+# Package version: 1.0-4
 #
-# $Id: iplots.R,v 1.71 2006/08/20 16:00:21 urbaneks Exp $
+# $Id: iplots.R,v 1.73 2006/09/05 23:09:55 urbaneks Exp $
 # (C)Copyright 2003-6 Simon Urbanek, 2006 Tobias Wichtrey
 # Authors: Simon Urbanek, Tobias Wichtrey, Alex Gouberman
 #
@@ -48,7 +48,7 @@
     Sys.putenv("DYLD_LIBRARY_PATH"=gsub("/usr/X11R6/lib","",dlp))
   cp<-paste(lib,pkg,"cont","iplots.jar",sep=.Platform$file.sep)
 
-  .jinit(cp, silent=TRUE)
+  .jinit(cp, parameters="-Xmx512m", silent=TRUE)
 
   ## variables from iplots 0.x-x
   ipv <- c(".iplots",".iplots.fw",".iset.selection",".isets",".iplot.curid",".iplot.current")
