@@ -1,10 +1,17 @@
 #==========================================================================
 # iplots - interactive plots for R
-# Package version: 1.1-0
+# Package version: 1.1-1
 #
-# $Id: iplots.R 141 2007-08-21 21:41:44Z urbanek $
+# $Id: iplots.R 147 2007-09-07 16:54:57Z urbanek $
 # (C)Copyright 2003-7 Simon Urbanek, 2006 Tobias Wichtrey
 # Authors: Simon Urbanek, Tobias Wichtrey, Alex Gouberman
+#
+# This copy of iplots is licensed under GPL v2.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
 #==========================================================================
 # -- global variables (in the package environment)
@@ -42,6 +49,8 @@
 setClass("iset", representation(obj="jobjRef", name="character"))
 setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", iset="iset"))
 
+.restricted.el <- FALSE # restricted event loop use (on OS X in the GUI and shell)
+
 # library initialization: Add "<iplots>/java/iplots.jar" to classpath,
 # initialize Java and create an instance on the Framework "glue" class
 .First.lib <- function(lib, pkg) {
@@ -60,9 +69,30 @@ setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", 
 
   # disable compatibility mode on Macs (experimental!)
   if (length(grep("^darwin",R.version$os))) {
-    .jcall("java/lang/System","S","setProperty","com.apple.eawt.CocoaComponent.CompatibilityMode","false")
-    if (!nchar(Sys.getenv("R_GUI_APP_VERSION")))
-      require(CarbonEL)
+      # this is a JGR 1.5 hack - it allows us to find out whether we are running
+      # inside JGR without touching any classes
+      if (!any(.jcall("java/lang/System","S","getProperty","main.class")=="org.rosuda.JGR.JGR")) {
+          #.jcall("java/lang/System","S","setProperty","com.apple.eawt.CocoaComponent.CompatibilityMode","false")
+          .restricted.el <<- TRUE
+          if (!nchar(Sys.getenv("R_GUI_APP_VERSION"))) {
+              library(CarbonEL)
+              # improve response time
+              .cel.set.sleep(0.01)
+          } else {
+              ## disable all handlers as they conflict with the GUI
+              .jcall("java/lang/System","S","setProperty","register.about","false")
+              .jcall("java/lang/System","S","setProperty","register.open","false")
+              .jcall("java/lang/System","S","setProperty","register.preferences","false")
+              .jcall("java/lang/System","S","setProperty","register.quit","false")
+          }
+          cat("Note: On Mac OS X we strongly recommend using iplots from within JGR.\nProceed at your own risk as iplots cannot resolve potential ev.loop deadlocks.\n'Yes' is assumed for all dialogs as they cannot be shown without a deadlock,\nalso ievent.wait() is disabled.\n")
+      } else {
+          # don't mess JGR up
+          .jcall("java/lang/System","S","setProperty","register.about","false")
+          .jcall("java/lang/System","S","setProperty","register.open","false")
+          .jcall("java/lang/System","S","setProperty","register.preferences","false")
+          .jcall("java/lang/System","S","setProperty","register.quit","false")
+      }
   }
   
   assign(".iplots.fw", if (nchar(Sys.getenv("NOAWT"))) NULL else .jnew("org/rosuda/iplots/Framework"), ipe)
@@ -75,7 +105,7 @@ setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", 
   ipe$.iplot.curid<-1
   ipe$.iplot.current<-NULL
 
-  if (.inside.make.check() || nchar(Sys.getenv("NOAWT"))) .jcall(.iplots.fw,, "setNoInteractionFlag", TRUE)
+  if (.inside.make.check() || .restricted.el || nchar(Sys.getenv("NOAWT"))) .jcall(.iplots.fw,, "setNoInteractionFlag", TRUE)
 }
 
 # helper function to identify a class in a strstr manner (not nice)
@@ -149,7 +179,7 @@ iset.list <- function() {
 }
 
 .iset.save <-function (ci=iset.cur()) {
-  .isets[[ci]]<<-list(iplots=.iplots,iplot.cid<-.iplot.curid,iplot.cur<-.iplot.current)
+  .isets[[ci]]<<-list(iplots=.iplots,iplot.cid=.iplot.curid,iplot.cur=.iplot.current)
 }
 
 iset.new <- function(name=NULL, payload=NULL) {
@@ -167,6 +197,60 @@ iset.new <- function(name=NULL, payload=NULL) {
       for (i in 1:length(payload)) ivar.new(n[i], payload[[i]])
   }
   iset(ci)
+}
+
+iset.rm <- function(which = iset.cur()) {
+    if (inherits(which, "iset")) {
+        which <- .jcall(.iplots.fw, "I", "indexOfSet", which@obj)
+        if (which < 0)
+            stop("invalid set (possibly already deleted")
+        which <- which + 1
+    }
+    if (is.character(which)) {
+        which <- .jcall(.iplots.fw, "I", "getSetIdByName", as.character(which)[1])
+        if (which < 0) stop("iSet of that name doesn't exist")
+        which <- which + 1
+    }
+    ocs <- iset.cur()
+    if (ocs == which) {
+        iset.set()
+        if (iset.cur() == ocs)
+            stop("cannot delete the last iSet, there must be at least one iSet at all times")
+    } else .iset.save(ocs)
+    if (!.jcall(.iplots.fw, "Z", "removeSetById", as.integer(which-1)))
+        stop("cannot remove iSet, invalid id")
+
+    l <- .isets[[which]]
+    lapply(l$iplots, .iplot.dispose)
+    .isets[[which]]<<-NULL
+    ci <- iset.cur()
+    .iplots<<-.isets[[ci]]$iplots
+    .iplot.curid<<-.isets[[ci]]$iplot.cid
+    .iplot.current<<-.isets[[ci]]$iplot.cur
+    ci
+}
+
+iplot.location <- function(x, y, relative=FALSE, plot=iplot.cur()) {
+    if (is.numeric(plot)) plot<-.iplots[[plot]]
+    if (inherits(plot, "iplot")) {
+        f<-.jcall(plot$obj,"Ljava/awt/Frame;","getFrame")
+        if (!is.jnull(f)) {
+            if (missing(x) && missing(y)) {
+                p <- .jcall(f,"Ljava/awt/Rectangle;","getBounds")
+                return (c(x=.jcall(p,"D","getX"), y=.jcall(p,"D","getY"), width=.jcall(p,"D","getWidth"), height=.jcall(p,"D","getHeight")))
+            }
+            if (missing(x))
+                { x <- if (is.logical(relative) && isTRUE(!relative)) iplot.location(plot=plot)[1] else 0 }
+            if (missing(y))
+                { y <- if (is.logical(relative) && isTRUE(!relative)) iplot.location(plot=plot)[2] else 0 }
+            loc <- c(0,0)
+            if (inherits(relative, "iplot"))
+                loc <- iplot.location(plot=relative)
+            else if (isTRUE(relative))
+                loc <- iplot.location(plot=plot)
+            .jcall(f,"V","setLocation",as.integer(x[1]+loc[1]), as.integer(y[1]+loc[2]))
+        }
+    } else stop("invalid plot")
 }
 
 iset <- function(which=iset.cur()) {
@@ -198,8 +282,19 @@ isets <- function() {
   .new.ivar(vid=vid, name=.jcall(vobj, "S", "getName"), obj=vobj, iset=x)
 }
 
+"$<-.iset" <- function(x, name, value) {
+    vid <- .jcall(x@obj, "I", "indexOf", as.character(name))
+    if (vid < 0) { # new name
+        ivar.new(name, value)
+        return(x)
+    }
+    # existing name = replace
+    vobj <- .jcall(x@obj, "Lorg/rosuda/ibase/SVar;", "at", vid)
+    x[[name]] <- value
+}
+
 "[[.iset" <- function(x, i) {
-  vid <- if (is.numeric(i)) as.integer(i-0.75) else .jcall(x@obj, "I", "indexOf", i)
+  vid <- if (is.numeric(i)) as.integer(i-0.75) else .jcall(x@obj, "I", "indexOf", as.character(i))
   if (vid < 0) stop("subscript out of bounds")
   vobj <- .jcall(x@obj, "Lorg/rosuda/ibase/SVar;", "at", vid)
   if (is.jnull(vobj)) stop("subscript out of bounds")
@@ -207,17 +302,18 @@ isets <- function() {
 }
 
 "[.iset" <- function(x, i=1:(dim(x)[1]), j=1:length(x)) {
-  j <- (1:length(x))[j]
-  l <- lapply(j, function(p) x[[p]][i])
-  names(l) <- unlist(lapply(j, function(p) { v<-.jcall(x@obj,"Lorg/rosuda/ibase/SVar;","at",as.integer(p-1)); if (is.jnull(v)) NA else .jcall(v,"S","getName") }))
-  as.data.frame(l,row.names=1:length(l[[1]]))
+    # trick to get negative indexing right
+    if (is.numeric(j)) j <- (1:length(x))[j]
+    l <- lapply(j, function(p) x[[p]][i])
+    names(l) <- unlist(lapply(j, function(p) x[[p]]@name))
+    as.data.frame(l,row.names=1:length(l[[1]]))
 }
 
 "[<-.iset" <- function(x, i=1:(dim(x)[1]), j=1:length(x), value) {
   j <- (1:length(x))[j]
   if (length(j)==0 || length(i)==0) return(x)
   for (vi in 1:length(j)) {
-    v <- s[[j[vi]]]
+    v <- x[[j[vi]]]
     if (!is.null(v)) {
       d<-dim(value)[2]
       if (is.null(d)||is.na(d)) {
@@ -247,9 +343,9 @@ isets <- function() {
   }
   iv <- x[[i]]
   if (!is.null(iv))
-    iv[i]<-value
+      ivar.update(iv, value)
   else
-    ivar.new(i, value)
+      ivar.new(i, value)
   x
 }
 
@@ -284,6 +380,10 @@ print.iset <- function (x, ...) {
 print.ivar <- function(x, ...) {
   print(paste("iVar{",.jcall(x@obj,"S","getName")," from ",x@iset@name,"}",sep=''),...)
 }
+
+# S4 objects are sometimes printed using `show' so we have to map show to print
+setMethod("show", "ivar", function(object) print.ivar(object))
+setMethod("show", "iset", function(object) print.iset(object))
 
 #==========================================================================
 # variables handling (iVar)
@@ -385,7 +485,7 @@ ivar.update <- function (var, cont, batch = FALSE) {
     iset.updateVars()
 }
 
-"[.ivar" <- function(x,...) ivar.data(x)[...]
+"[.ivar" <- function(x,i,...) if (missing(i)) ivar.data(x) else ivar.data(x)[i]
 "[<-.ivar"<- function(x,...,value) { a <- ivar.data(x); a[...] <- value; ivar.update(x, a) }
 
 
@@ -409,15 +509,21 @@ iplot.list <- function () {
   if (exists(".iplots")) .iplots else list()
 }
 
+# close doesn't dispose of the plot back-end, use .iplot.dispose instead
 .iplot.close <- function(plot) {
-  .jcall(.jcall(plot$obj,"Ljava/awt/Frame;","getFrame"),"V","dispose")
+    .jcall(.jcall(plot$obj,"Ljava/awt/Frame;","getFrame"),"V","dispose")
+}
+
+# dispose implies close i.e. the window is closed but also other structures are released
+.iplot.dispose <- function(plot) {
+    .jcall(plot$obj,"V","dispose")
 }
 
 iplot.off <- function(plot=iplot.cur()) {
   if (length(.iplots)==0) {
     if (inherits(plot, "iplot")) {
       warning("Plot is not on the plot list (which is empty), attempting to close anyway.")
-      .iplot.close(plot)
+      .iplot.dispose(plot)
     }
     return()
   }
@@ -431,7 +537,7 @@ iplot.off <- function(plot=iplot.cur()) {
       }
     if (!is.integer(plot)) {
       warning("Plot is not on the plot list, attempting to close anyway.")
-      .iplot.close(plot)
+      .iplot.dispose(plot)
       return()
     }
   }
@@ -443,7 +549,7 @@ iplot.off <- function(plot=iplot.cur()) {
       j[[k]]<-.iplots[[i]]
       k<-k+1
     } else
-      .iplot.close(.iplots[[i]])
+      .iplot.dispose(.iplots[[i]])
   .iplots <<- j
   if (length(j)==0) {
     .iplot.current<<-NULL
@@ -849,14 +955,6 @@ iplot.data <- function(id=NULL) {
   }
 }
 
-# old API functions
-
-iplot.showVars <- function() { .jcall(.iplots.fw,"V","newFrame"); }
-iplot.resetXaxis <- function(ipl=lastPlot) { .jcall(.jcall(ipl,"Lorg/rosuda/ibase/toolkit/Axis;","getXAxis"),"V","setDefaultRange"); }
-iplot.resetYaxis <- function(ipl=lastPlot) { .jcall(.jcall(ipl,"Lorg/rosuda/ibase/toolkit/Axis;","getYAxis"),"V","setDefaultRange"); }
-iplot.resetAxes <- function(ipl=lastPlot) { resetXaxis(ipl); resetYaxis(ipl); }
-iset.df <- function(df) { ndf<-list(); for(i in names(df)) { ndf[[i]]<-ivar.new(i,df[[i]]) }; }
-
 # BaseCanvas methods
 
 iplot.zoomIn<-function(x1,y1,x2,y2) {.jcall(.iplot.current$obj,,"performZoomIn",as.integer(x1),as.integer(y1),as.integer(x2),as.integer(y2));invisible();}
@@ -877,13 +975,13 @@ iplot.backend <- function(type = NULL) {
   getypes[.jcall(.iplots.fw,"I","getGraphicsEngine")+1]
 }
 
-iplot.setExtendedQuery <- function(plotID,str) {
-	if(str==F)  .jcall(.iplots.fw,,"useExtQueryString",as.integer(plotID),F)
-	else .jcall(.iplots.fw,,"setExtQueryString",as.integer(plotID),.jnew("java/lang/String",str))
-	invisible();
+iplot.setExtendedQuery <- function(str, plotID=.iplot.curid) {
+    if(is.null(str) || str==FALSE)
+        .jcall(.iplots.fw,,"useExtQueryString",as.integer(plotID),FALSE)
+    else
+        .jcall(.iplots.fw,,"setExtQueryString",as.integer(plotID),as.character(str)[1])
+    invisible()
 }
-iplot.setExtendedQuery<-function(str) {iplot.setExtendedQuery(.iplot.curid,str); invisible();}
-
 
 #==========================================================================
 # selection/highlighting API
@@ -893,7 +991,7 @@ iset.select <- function(what, mode="replace", mark=TRUE, batch=FALSE) {
   m<-.jcall(.jcall(.iplots.fw,"Lorg/rosuda/ibase/SVarSet;","getCurrentSet"),"Lorg/rosuda/ibase/SMarker;","getMarker")
   if (mode=="replace") iset.selectNone(batch=batch)
   if (mode=="intersect")
-    error("I'm sorry, mode='intersect' is not yet supported in this version.")
+      stop("I'm sorry, mode='intersect' is not yet supported in this version.")
   if (is.logical(what)) {
     for(i in 1:length(what)) { if (what[i]) .jcall(m,"V","set",as.integer(i-1:1),mark) }
   } else {
@@ -1239,6 +1337,10 @@ ievent.wait <- function() {
   if (.inside.make.check()) {
     cat("NOTE: ievent.wait is likely being run from within `make check', returning NULL to prevent `make check' from stalling.\n")
     return(NULL)
+  }
+  if (.restricted.el) {
+      warning("ievent.wait cannot be used on Mac OS X without JGR, because waiting will deadlock the R, Java and system event loops. Returning NULL.")
+      return(NULL)
   }
   msg<-.jcall(.iplots.fw,"Lorg/rosuda/ibase/NotifyMsg;","eventWait")
   if (!is.null(msg)) {

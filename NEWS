@@ -1,6 +1,23 @@
  NEWS/ChangeLog for iPlots package
 ===================================
 
+1.1-1	2007-09-07
+     o	allow the use of iplots within the R GUI on Mac OS X, but show a
+	warning on possible event loop deadlocks.
+
+     o	update docs to flag S3 methods correctly
+
+     o	map S4 show to S3 print so iset/ivar are shown correctly
+
+     o	add `$<-.iset` method, enhance and fix other accessor methods
+	for both iset and ivar. Added examples (in ?ivar and ?iset)
+
+     o	add iset.rm() which allows removal of iSets and all associated
+	plots
+
+     o	add iplot.location() which is experimental for now until nesting
+	of plots is defined properly
+
 1.1-0	2007-08-22
      o	use S4 classes for ivar and iset
 

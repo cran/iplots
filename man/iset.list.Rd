@@ -5,7 +5,9 @@
 \alias{iset.next}
 \alias{iset.prev}
 \alias{iset.cur}
+\alias{iset.rm}
 \alias{print.iset}
+\alias{show,iset-method}
 \title{
 iSet management functions.
 }
@@ -44,6 +46,10 @@ iSet management functions.
   
   \code{\link{iset.set}} makes the iSet with the specified ID current.
 
+  \code{\link{iset.rm}} removes the given iSet and all associated plots.
+  Note that this may cause the current set ID may change (even if some
+  other iSet is removed).
+
   \code{print.iset} prints an iSet object.
 }
 \usage{
@@ -53,7 +59,8 @@ iset.cur()
 iset.next(which=iset.cur())
 iset.prev(which=iset.cur())
 iset.set(which=iset.next())
-print.iset(x, ...)
+iset.rm(which=iset.cur())
+\method{print}{iset}(x, ...)
 }
 \arguments{
   \item{name}{Name of the new iSet. If no name is specified, an
@@ -65,6 +72,12 @@ print.iset(x, ...)
     name of the iSet.}
   \item{x}{An iSet object to print}
   \item{...}{further parameters to be passed to \code{print}}
+}
+\section{Methods}{
+  \describe{
+    \item{show}{\code{signature(object = "iset")}: is mapped to
+      \code{print.iset}}
+  }
 }
 \seealso{
   \code{\link{iset}}, \code{\link{iplot.list}}, \code{\link{iobj.list}}
