@@ -1,8 +1,8 @@
 #==========================================================================
 # iplots - interactive plots for R
-# Package version: 1.0-5
+# Package version: 1.0-7
 #
-# $Id: iplots.R,v 1.76 2006/10/10 23:25:40 urbaneks Exp $
+# $Id: iplots.R 132 2007-04-18 14:13:56Z urbanek $
 # (C)Copyright 2003-6 Simon Urbanek, 2006 Tobias Wichtrey
 # Authors: Simon Urbanek, Tobias Wichtrey, Alex Gouberman
 #
@@ -43,9 +43,6 @@
 # initialize Java and create an instance on the Framework "glue" class
 .First.lib <- function(lib, pkg) {
   require(rJava)
-  dlp<-Sys.getenv("DYLD_LIBRARY_PATH")
-  if (nchar(dlp)) # for Mac OS X we need to remove X11 from lib-path
-    Sys.putenv("DYLD_LIBRARY_PATH"=gsub("/usr/X11R6/lib","",dlp))
   cp<-paste(lib,pkg,"cont","iplots.jar",sep=.Platform$file.sep)
 
   .jinit(cp, parameters="-Xmx512m", silent=TRUE)
@@ -218,7 +215,7 @@ print.ivar <- function(x, ...) {
 #}
 
 
-# create a new variable (undocumented!)
+# create a new variable (we should make this a method to handle various types)
 ivar.new <- function (name=deparse(substitute(cont)), cont) {
   if (!is.character(name) || length(name)>1)
     stop("variable name must be a single string")
@@ -254,6 +251,21 @@ ivar.new <- function (name=deparse(substitute(cont)), cont) {
   if (id>=0) {
     o <- .jcall(.iplots.fw,"Lorg/rosuda/ibase/SVar;","getVar",id)
     .new.ivar(vid=id,name=.jcall(o,"S","getName"),obj=o)
+  } else NULL
+}
+
+ivar.new.map <- function (name, x, y) {
+  id<-.jcall(.iplots.fw,"I","newVar",name,.jarray(x),.jarray(y))
+  if (id==-2) stop("Operation canceled by user.")
+  if (id==-3) {
+    iset.new()
+    id<-.jcall(.iplots.fw,"I","newVar",name,.jarray(x),.jarray(y))
+    if (id<0)
+      stop("Unable to create an map iVariable");
+  }
+  if (id>=0) {
+    o <- .jcall(.iplots.fw,"Lorg/rosuda/ibase/SVar;","getVar",id)
+    .new.ivar(vid=id, name=.jcall(o,"S","getName"), obj=o)
   } else NULL
 }
 
@@ -394,6 +406,12 @@ print.iplot <- function(x, ...) { cat("ID:",x$id," Name: \"",attr(x,"iname"),"\"
 
 .iplot.iBar  <- function (var, ...) {
   a<-.iplot.new(lastPlot<-.jcall(.iplots.fw,"Lorg/rosuda/ibase/plots/BarCanvas;","newBarchart",var$vid),"ibar")
+  if (length(list(...))>0) iplot.opt(...,plot=a)
+  a
+}
+
+.iplot.iMap  <- function (var, ...) {
+  a<-.iplot.new(lastPlot<-.jcall(.iplots.fw,"Lorg/rosuda/ibase/plots/MapCanvas;","newMap",var$vid),"imap")
   if (length(list(...))>0) iplot.opt(...,plot=a)
   a
 }
@@ -579,6 +597,19 @@ ibar <- function(var, ...) {
   if (!inherits(var, "ivar") && (is.vector(var) || is.factor(var)) && length(var)>1)
      var<-ivar.new(deparse(substitute(var))[1], as.factor(var))
   .iplot.iBar(var, ...)
+}
+
+imap <- function(x, y=NULL, ...) {
+  if (inherits(x, "map")) {
+    y <- x$y
+    x <- x$x
+  }
+  if (!inherits(x, "ivar")) {
+    if (is.null(y))
+      stop("Missing y coordinates")
+    var<-ivar.new.map(deparse(substitute(var))[1], as.numeric(x), as.numeric(y))
+  }
+  .iplot.iMap(var, ...)
 }
 
 ihist <- function(var, ...) {
