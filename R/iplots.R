@@ -1,8 +1,8 @@
 #==========================================================================
 # iplots - interactive plots for R
-# Package version: 1.1-4
+# Package version: 1.1-5
 #
-# $Id: iplots.R 156 2011-07-18 15:02:02Z urbanek $
+# $Id: iplots.R 162 2013-02-06 12:46:31Z urbanek $
 # (C)Copyright 2003-11 Simon Urbanek, 2006 Tobias Wichtrey
 # Authors: Simon Urbanek, Tobias Wichtrey, Alex Gouberman
 #
@@ -81,9 +81,11 @@ setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", 
           #.jcall("java/lang/System","S","setProperty","com.apple.eawt.CocoaComponent.CompatibilityMode","false")
           .restricted.el <<- TRUE
           if (!nchar(Sys.getenv("R_GUI_APP_VERSION"))) {
-              library(CarbonEL)
+              # fire up event loop by simply starting a Quartz device
+              grDevices::quartz("dummy", 2, 2)
+              dev.off()
               # improve response time
-              .cel.set.sleep(0.01)
+              # would need QuartzCocoa_SetLatency(10) call
           } else {
               ## disable all handlers as they conflict with the GUI
               .jcall("java/lang/System","S","setProperty","register.about","false")
@@ -91,7 +93,7 @@ setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", 
               .jcall("java/lang/System","S","setProperty","register.preferences","false")
               .jcall("java/lang/System","S","setProperty","register.quit","false")
           }
-          cat("Note: On Mac OS X we strongly recommend using iplots from within JGR.\nProceed at your own risk as iplots cannot resolve potential ev.loop deadlocks.\n'Yes' is assumed for all dialogs as they cannot be shown without a deadlock,\nalso ievent.wait() is disabled.\n")
+          packageStartupMessage("Note: On Mac OS X we strongly recommend using iplots from within JGR.\nProceed at your own risk as iplots cannot resolve potential ev.loop deadlocks.\n'Yes' is assumed for all dialogs as they cannot be shown without a deadlock,\nalso ievent.wait() is disabled.\nMore recent OS X version do not allow signle-threaded GUIs and will fail.\n")
       } else {
           # don't mess JGR up
           .jcall("java/lang/System","S","setProperty","register.about","false")
@@ -1179,12 +1181,12 @@ iobj.rm <- function(which=iobj.cur(), plot = iplot.cur()) {
   if (!is.null(x) || !is.null(y)) {
     if (is.null(x)) x<-.jcall(o$obj,"[D","getX",evalArray=TRUE)
     if (is.null(y)) y<-.jcall(o$obj,"[D","getY",evalArray=TRUE)
-    .jcall(o$obj,"V","set",as.real(x),as.real(y))
+    .jcall(o$obj,"V","set",as.double(x),as.double(y))
   }
   if (!is.null(ax))
-    .jcall(o$obj,"V","setAX",as.real(ax))
+    .jcall(o$obj,"V","setAX",as.double(ax))
   if (!is.null(ay))
-    .jcall(o$obj,"V","setAY",as.real(ay))
+    .jcall(o$obj,"V","setAY",as.double(ay))
   if (!is.null(txt)) {
     .jcall(o$obj,"V","set",as.character(txt))
   }
