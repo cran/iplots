@@ -9,18 +9,18 @@
   it may be of limited use. It was created as a proof of the iBase
   concept which makes it very easy to implement new interactive plots.
 }
-\synopsis{
+\usage{
   ihammock(...)
 }
-\usage{
-  ihammock(vars, ...)
-}
 \arguments{
-  \item{vars}{list of factors to display}
-  \item{...}{All additional parameters are passed to
-    \code{\link{iplot.opt}}. All unnamed parameters are assumed to be
-    data to plot.
+  \item{...}{All unnamed parameters are treated as variables to
+    display. All additional parameters are passed to \code{\link{iplot.opt}}.
   }
+}
+\details{
+  The plot can be used in either in the form \code{ihammock(df)} to plot
+  a list or data frame of variables or \code{ihammock(x, y, z)} to plot
+  factors \code{x}, \code{y} and \code{z}.
 }
 \value{
   Resulting plot object.
