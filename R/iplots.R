@@ -1,8 +1,7 @@
 #==========================================================================
 # iplots - interactive plots for R
-# Package version: 1.1-7
+# Package version: 1.1-8
 #
-# $Id: iplots.R 173 2013-11-19 18:21:53Z urbanek $
 # (C)Copyright 2003-13 Simon Urbanek, 2006 Tobias Wichtrey
 # Authors: Simon Urbanek, Tobias Wichtrey, Alex Gouberman
 #
@@ -102,7 +101,7 @@ setClass("ivar", representation(obj="jobjRef", vid="integer", name="character", 
               .jcall("java/lang/System","S","setProperty","register.preferences","false")
               .jcall("java/lang/System","S","setProperty","register.quit","false")
           }
-          ipe$.issue.warning <- "Note: On Mac OS X we strongly recommend using iplots from within JGR.\nProceed at your own risk as iplots cannot resolve potential ev.loop deadlocks.\n'Yes' is assumed for all dialogs as they cannot be shown without a deadlock,\nalso ievent.wait() is disabled.\nMore recent OS X version do not allow signle-threaded GUIs and will fail.\n"
+          ipe$.issue.warning <- "Note: On macOS we strongly recommend using iplots from within JGR.\nProceed at your own risk as iplots cannot resolve potential ev.loop deadlocks.\n'Yes' is assumed for all dialogs as they cannot be shown without a deadlock,\nalso ievent.wait() is disabled.\nMore recent macOS versions do not allow single-threaded GUIs and will fail.\n"
       } else {
           # don't mess JGR up
           .jcall("java/lang/System","S","setProperty","register.about","false")
@@ -1044,7 +1043,7 @@ iset.selectNone <- function(batch=FALSE) { .jcall(.jcall(.jcall(.iplots.fw,"Lorg
 # in paper: iset.color(color, what=iset.selected())
 iset.col <- function(col=NULL) { iset.brush(col) }
 iset.brush <- function(col=NULL) {
-  if (is.null(col) || is.na(col)) col<-as.integer(c(0,0))
+  if (is.null(col) || (length(col) > 0 && all(is.na(col)))) col<-as.integer(c(0,0))
   if (is.numeric(col) && !is.integer(col)) col<-as.integer(col)
   if (is.factor(col)) col<-as.integer(as.integer(col)+1)
   .jcall(.iplots.fw,"V","setSecMark",col);

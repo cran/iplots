@@ -1,8 +1,0 @@
-#!/bin/sh
-
-VER=`sed -n -e 's/.*Package version: \([0-9.-]\{1,\}\).*/\1/p' R/iplots.R`
-if test "$1" = "-f"; then 
-    echo "iplots_${VER}.tar.gz"
-else
-    echo "${VER}"
-fi
